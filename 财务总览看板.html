@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>财务总览看板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: #f0f4f8; color: #333; line-height: 1.5; font-variant-numeric: tabular-nums; }
+  .page-header { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8e 100%); color: #fff; padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
+  .page-header h1 { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+  .container { max-width: 1560px; margin: 0 auto; padding: 24px 32px 48px; }
+
+  .top-panel {
+    background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    margin-bottom: 20px; overflow: hidden;
+  }
+  .filter-bar {
+    background: #fff; border: none; border-bottom: 1px solid #e2e8f0; border-radius: 0;
+    padding: 14px 20px; margin-bottom: 0; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .filter-bar .filter-item { display: flex; align-items: center; gap: 8px; }
+  .filter-bar .filter-item label { font-size: 13px; font-weight: 600; color: #475569; white-space: nowrap; }
+  .filter-bar .filter-item select {
+    height: 34px; min-width: 150px; padding: 0 10px; border: 1.5px solid #3b82f6; border-radius: 4px;
+    font-size: 13px; color: #334155; background: #fff; outline: none; cursor: pointer; appearance: auto;
+  }
+  .filter-bar .btn-query {
+    height: 34px; padding: 0 24px; background: #3b82f6; color: #fff; border: none; border-radius: 4px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .filter-bar .btn-query:hover { background: #2563eb; }
+  .filter-bar .data-update-time { margin-left: auto; font-size: 13px; color: #64748b; white-space: nowrap; }
+
+  .data-info-bar {
+    background: #fff; border: none; border-radius: 0; padding: 10px 20px 14px; margin-bottom: 0;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap; font-size: 13px; color: #475569;
+  }
+  .data-info-bar .info-label { font-weight: 600; color: #475569; margin-right: 4px; }
+  .data-info-bar .info-progress { font-weight: 700; font-size: 13px; color: #3b82f6; background: #eff6ff; padding: 2px 10px; border-radius: 4px; }
+  .data-info-bar .info-note { width: 100%; margin-top: 2px; font-size: 13px; color: #475569; }
+
+  .sub-title { font-size: 15px; font-weight: 700; color: #334155; margin: 28px 0 12px; padding-left: 10px; border-left: 3px solid #3b82f6; }
+  .sub-title.level-1 { margin-top: 8px; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-bottom: 8px; }
+  @media (max-width: 860px) { .kpi-grid { grid-template-columns: 1fr; } }
+
+  .trend-btn {
+    position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; justify-content: center;
+    padding: 3px 5px; background: #eef2ff; border: none; border-radius: 10px; cursor: pointer; transition: all 0.2s; z-index: 5; opacity: 0.5;
+  }
+  .trend-btn:hover { background: #e0e7ff; transform: scale(1.05); opacity: 1; }
+  .trend-btn svg { width: 16px; height: 12px; }
+
+  .kpi-card { background: #fff; border-radius: 8px; padding: 16px 20px 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); position: relative; }
+  .kpi-card .card-title { font-size: 16px; font-weight: 700; color: #1a1a2e; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; padding-right: 28px; }
+  .kpi-card .info-icon {
+    width: 18px; height: 18px; border-radius: 50%; background: #e0e7ff; color: #6366f1; font-size: 12px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer; position: relative; flex-shrink: 0; line-height: 1;
+  }
+  .kpi-card .info-icon:hover::after {
+    content: attr(data-tip); position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 8px);
+    background: #1e293b; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 400;
+    white-space: normal; max-width: 260px; min-width: 180px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15); line-height: 1.5;
+  }
+  .kpi-card .info-icon:hover::before {
+    content: ''; position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 2px);
+    border: 6px solid transparent; border-top-color: #1e293b; z-index: 100;
+  }
+  .kpi-card .kpi-sides {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .kpi-card .kpi-side {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr) 72px 58px;
+    column-gap: 8px;
+    row-gap: 8px;
+    align-items: center;
+    min-width: 0;
+    padding: 0 12px;
+  }
+  .kpi-card .kpi-side.month { border-right: 1px solid #f1f5f9; }
+  .kpi-card .kpi-side > * { min-width: 0; }
+  .kpi-card .cell-lab {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 13px; font-weight: 600; color: #475569; white-space: nowrap;
+  }
+  .kpi-card .cell-lab .bu-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .kpi-card .cell-lab .bu-dot.jb { background: #f59e0b; }
+  .kpi-card .cell-lab .bu-dot.hp { background: #3b82f6; }
+  .kpi-card .cell-lab .bu-dot.yy { background: #10b981; }
+  .kpi-card .cell-val {
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; color: #1a1a2e;
+  }
+  .kpi-card .cell-rate, .kpi-card .cell-yoy {
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 0;
+  }
+  .kpi-card .bu-split { border-top: 1px solid #f1f5f9; padding-top: 8px; }
+  .kpi-card .p-badge {
+    width: 28px; height: 28px; border-radius: 50%; background: #3b82f6; color: #fff; font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .kpi-card .p-badge.ytd {
+    width: 28px; height: 28px; min-width: 28px; padding: 0; border-radius: 50%;
+    font-size: 10px; letter-spacing: -0.4px; line-height: 1; white-space: nowrap;
+  }
+  .kpi-card .p-value { font-size: 20px; line-height: 1.2; }
+  .kpi-card .p-meta { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+  .kpi-card .p-rate-label { font-size: 11px; color: #94a3b8; }
+  .kpi-card .p-rate-val, .kpi-card .p-yoy-val { font-size: 14px; font-weight: 700; }
+  .kpi-card .p-rate-val.good, .kpi-card .p-yoy-val.good { color: #16a34a; }
+  .kpi-card .p-rate-val.bad, .kpi-card .p-yoy-val.bad { color: #ef4444; }
+  .kpi-card .p-rate-val.flat, .kpi-card .p-yoy-val.flat { color: #1a1a2e; }
+  .kpi-card .p-rate-val.na, .kpi-card .p-yoy-val.na { color: #cbd5e1; }
+  .kpi-card .bm-val, .kpi-card .by-val { font-size: 14px; }
+  .kpi-card .bm-rate, .kpi-card .by-rate,
+  .kpi-card .bm-yoy, .kpi-card .by-yoy { font-size: 13px; font-weight: 600; }
+  .kpi-card .bm-rate.good, .kpi-card .by-rate.good,
+  .kpi-card .bm-yoy.good, .kpi-card .by-yoy.good { color: #16a34a; }
+  .kpi-card .bm-rate.bad, .kpi-card .by-rate.bad,
+  .kpi-card .bm-yoy.bad, .kpi-card .by-yoy.bad { color: #ef4444; }
+  .kpi-card .bm-rate.flat, .kpi-card .by-rate.flat,
+  .kpi-card .bm-yoy.flat, .kpi-card .by-yoy.flat { color: #1a1a2e; }
+  .kpi-card .bm-rate.na, .kpi-card .by-rate.na,
+  .kpi-card .bm-yoy.na, .kpi-card .by-yoy.na { color: #cbd5e1; }
+
+  .chart-area { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .chart-area .chart-title-bar {
+    background: #d6eaf8; padding: 10px 16px; font-size: 15px; font-weight: 700; color: #1a1a2e; text-align: center;
+  }
+  .chart-filter-bar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; flex-wrap: wrap; }
+  .chart-filter-bar label { font-weight: 600; }
+  .chart-filter-bar select { padding: 4px 8px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #333; cursor: pointer; min-width: 140px; }
+  .chart-body { padding: 8px 8px 4px; }
+  #comboChart { width: 100%; height: 380px; }
+
+  .bu-section { background: #fff; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .scroll-x { overflow-x: auto; margin-bottom: 8px; max-height: 640px; overflow-y: auto; }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 8px; }
+  .data-table th { background: #3b82f6; color: #fff; padding: 7px 8px; text-align: center; font-weight: 600; white-space: nowrap; border: 1px solid #2563eb; position: sticky; top: 0; z-index: 2; }
+  .data-table td { padding: 6px 8px; text-align: center; border: 1px solid #e2e8f0; white-space: nowrap; }
+  .data-table tr:nth-child(even) td { background: #f8fafc; }
+  .data-table .row-label { font-weight: 600; background: #f1f5f9; text-align: left; padding-left: 10px; }
+  .data-table .metric-cell { background: #eef2ff; font-weight: 700; color: #1e3a5f; text-align: left; padding-left: 10px; }
+  .data-table .rate-good { color: #16a34a; font-weight: 700; }
+  .data-table .rate-bad { color: #dc2626; font-weight: 700; }
+  .data-table .rate-flat { color: #1a1a2e; font-weight: 700; }
+  .data-table .rate-na { color: #94a3b8; }
+  .data-table .total-col { font-weight: 700; background: #f8fafc; }
+
+  .data-table th.th-filterable { position: sticky; top: 0; padding: 7px 26px 7px 8px; }
+  .data-table .excel-filter-btn {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    width: 18px; height: 18px; padding: 0; border: none; background: transparent;
+    color: #fff; cursor: pointer; opacity: 0.82; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .data-table .excel-filter-btn:hover, .data-table .excel-filter-btn.open { opacity: 1; background: rgba(255,255,255,0.18); border-radius: 3px; }
+  .data-table .excel-filter-btn.is-filtered { color: #fde047; opacity: 1; }
+  .data-table .excel-filter-btn svg { display: block; }
+
+  .excel-pop {
+    display: none; position: fixed; z-index: 2000; min-width: 168px; max-width: 220px;
+    background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18); padding: 8px 0 6px; font-size: 12px; color: #1e293b;
+  }
+  .excel-pop.show { display: block; }
+  .excel-pop .excel-all {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px 8px; margin: 0 0 4px;
+    border-bottom: 1px solid #e2e8f0; font-weight: 600; cursor: pointer;
+  }
+  .excel-pop .excel-list { max-height: 220px; overflow-y: auto; }
+  .excel-pop .excel-item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer; font-weight: 500;
+  }
+  .excel-pop .excel-item:hover, .excel-pop .excel-all:hover { background: #f1f5f9; }
+  .excel-pop input { margin: 0; accent-color: #3b82f6; }
+
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-content {
+    background: #fff; border-radius: 12px; width: 92%; max-width: 1100px; height: 88vh; max-height: 88vh;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2); display: flex; flex-direction: column; overflow: hidden;
+  }
+  .modal-header-sticky { padding: 16px 24px 10px; display: flex; align-items: flex-start; gap: 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+  .modal-header-left { flex: 1; }
+  .modal-content h3 { font-size: 18px; color: #1a1a2e; }
+  .modal-content .close-btn { background: none; border: none; font-size: 22px; cursor: pointer; color: #94a3b8; flex-shrink: 0; }
+  .modal-body { padding: 12px 24px 16px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .legend-bar { display: flex; gap: 20px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+  .legend-item { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; background: none; border: none; padding: 0; }
+  .legend-item .swatch { width: 28px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+  .legend-item .legend-label { font-size: 13px; color: #334155; font-weight: 500; }
+  .legend-item.inactive .swatch { background: #cbd5e1 !important; }
+  .legend-item.inactive .swatch-line line, .legend-item.inactive .swatch-line circle { stroke: #cbd5e1 !important; fill: #cbd5e1 !important; }
+  .legend-item.inactive .legend-label { color: #94a3b8; font-weight: 400; }
+  #trendChart { width: 100%; height: 168px; flex-shrink: 0; }
+  .level-table-section { margin-top: 8px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .level-table-section h4 { font-size: 14px; font-weight: 600; color: #1e293b; margin-bottom: 8px; padding-left: 8px; border-left: 3px solid #3b82f6; flex-shrink: 0; }
+  .level-table-wrap { flex: 1; min-height: 0; overflow: auto; }
+  .level-data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .level-data-table th {
+    background: #3b82f6; color: #fff; padding: 8px 10px; text-align: center; font-weight: 500;
+    border: 1px solid #2563eb; white-space: nowrap; position: sticky; top: 0; z-index: 3;
+  }
+  .level-data-table td { padding: 7px 10px; text-align: center; border: 1px solid #e2e8f0; white-space: nowrap; }
+  .level-data-table tr:nth-child(even) td { background: #f8fafc; }
+  .level-data-table .row-label { font-weight: 600; background: #f1f5f9; text-align: left; padding-left: 12px; }
+  .level-data-table .level-header td { background: #eef2ff; }
+  .level-data-table td.rate-good { color: #16a34a; font-weight: 600; }
+  .level-data-table td.rate-bad { color: #dc2626; font-weight: 600; }
+  .level-data-table td.rate-flat { color: #1a1a2e; font-weight: 600; }
+  .level-data-table td.rate-na { color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="page-header"><h1>财务总览看板</h1></div>
+<div class="container">
+  <div class="top-panel">
+  <div class="filter-bar">
+    <div class="filter-item">
+      <label>年月</label>
+      <select id="ymSelect"></select>
+    </div>
+    <button class="btn-query" type="button" onclick="renderAll()">查询</button>
+    <div class="data-update-time">数据更新时间：2026/08/18 23:59</div>
+  </div>
+  <div class="data-info-bar" id="infoBar"></div>
+  </div>
+
+  <div class="sub-title level-1">一、主营指标概览</div>
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="sub-title">二、月度趋势达成及同比</div>
+  <div class="chart-area">
+    <div class="chart-filter-bar">
+      <span><label>指标</label>
+        <select id="chartMetric"></select>
+      </span>
+      <span><label>公司</label>
+        <select id="chartCompany"></select>
+      </span>
+    </div>
+    <div class="chart-title-bar" id="comboTitle">集团折前收入月趋势</div>
+    <div class="chart-body"><div id="comboChart"></div></div>
+  </div>
+
+  <div class="sub-title">三、明细数据</div>
+  <div class="bu-section" style="padding-top:16px;">
+    <div class="scroll-x">
+      <table class="data-table" id="detailTable"></table>
+    </div>
+  </div>
+</div>
+
+<div id="excelFilterPop" class="excel-pop" hidden></div>
+
+<div class="modal-overlay" id="trendModal">
+  <div class="modal-content">
+    <div class="modal-header-sticky">
+      <div class="modal-header-left"><h3 id="modalTitle">趋势分析</h3></div>
+      <button class="close-btn" type="button" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="legend-bar" id="legendBar"></div>
+      <div id="trendChart"></div>
+      <div class="level-table-section">
+        <h4>当前层级与下层级数据对比</h4>
+        <div class="level-table-wrap">
+          <table class="level-data-table" id="levelDataTable"></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const AS_OF = new Date(2026, 7, 18); // 2026-08-18
+  const CLOSED_M = 8;
+  const YEAR = 2026;
+  const CHART_COLOR = { act: '#3b82f6', bud: '#93c5fd', rate: '#f59e0b', yoy: '#16a34a' };
+  const MONTH_LABELS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const COMPANIES = [
+    { key: 'jb', name: '佳贝', color: '#f59e0b', scale: 0.38 },
+    { key: 'hp', name: '海普', color: '#3b82f6', scale: 0.40 },
+    { key: 'yy', name: '营养品', color: '#10b981', scale: 0.22 }
+  ];
+  const CO_ALL = [{ key: 'group', name: '集团整体', short: '集团' }].concat(COMPANIES.map(c => ({ key: c.key, name: c.name, short: c.name })));
+  const METRICS = [
+    { key: 'preRev', name: '折前收入', unit: '万元', kind: 'amount', tip: '未扣除折扣前的销售收入' },
+    { key: 'opRev', name: '营业收入', unit: '万元', kind: 'amount', tip: '扣除折扣后的营业收入' },
+    { key: 'profit', name: '利润总额', unit: '万元', kind: 'amount', tip: '营业利润加营业外收支后的利润总额' },
+    { key: 'gpRate', name: '毛利率', unit: '%', kind: 'rate', num: 'gp', den: 'mainRev', tip: '毛利 / 主营业务收入' },
+    { key: 'sellRate', name: '销售费用率', unit: '%', kind: 'rate', num: 'sell', den: 'mainRev', tip: '销售费用 / 主营业务收入' },
+    { key: 'npRate', name: '净利润率', unit: '%', kind: 'rate', num: 'np', den: 'mainRev', tip: '净利润 / 主营业务收入' }
+  ];
+  const AMOUNT_KEYS = ['preRev', 'opRev', 'profit', 'mainRev', 'gp', 'sell', 'np'];
+  const ITEMS = [
+    { key: 'act', name: '实际' },
+    { key: 'bud', name: '预算' },
+    { key: 'rate', name: '达成率' },
+    { key: 'ly', name: '同期' },
+    { key: 'yoy', name: '同比' }
+  ];
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function genData() {
+    const rnd = mulberry32(20260818);
+    const season = [0.92, 0.88, 1.05, 1.02, 0.98, 1.08, 1.12, 1.06, 1.04, 1.00, 0.95, 0.90];
+    const BASE = 18500;
+    const raw = { jb: [], hp: [], yy: [] };
+    COMPANIES.forEach(function (co) {
+      for (var m = 0; m < 12; m++) {
+        var pre = BASE * co.scale * season[m] * (0.97 + rnd() * 0.06);
+        var budRate = 0.93 + rnd() * 0.14;
+        var yoyBase = 1.02 + (rnd() - 0.45) * 0.10;
+        var cell = {
+          preRev: { act: pre, bud: pre / budRate, ly: pre / yoyBase },
+          opRev: {}, profit: {}, mainRev: {}, gp: {}, sell: {}, np: {}
+        };
+        var opMul = 0.93 + rnd() * 0.03;
+        var mainMul = 0.96 + rnd() * 0.02;
+        ['act', 'bud', 'ly'].forEach(function (k) {
+          var preV = cell.preRev[k];
+          cell.opRev[k] = preV * opMul;
+          cell.mainRev[k] = cell.opRev[k] * mainMul;
+          cell.gp[k] = cell.mainRev[k] * (0.39 + rnd() * 0.06);
+          cell.sell[k] = cell.mainRev[k] * (0.16 + rnd() * 0.05);
+          cell.profit[k] = cell.mainRev[k] * (0.09 + rnd() * 0.05);
+          cell.np[k] = cell.profit[k] * (0.74 + rnd() * 0.08);
+        });
+        if (m + 1 > CLOSED_M) {
+          AMOUNT_KEYS.forEach(function (k) { cell[k].act = null; });
+        }
+        raw[co.key].push(cell);
+      }
+    });
+    return raw;
+  }
+
+  const RAW = genData();
+
+  function addAmt(a, b) {
+    if (a == null && b == null) return null;
+    return (a || 0) + (b || 0);
+  }
+  function groupMonth(m) {
+    var out = {};
+    AMOUNT_KEYS.forEach(function (k) { out[k] = { act: null, bud: 0, ly: 0 }; });
+    COMPANIES.forEach(function (co) {
+      var cell = RAW[co.key][m];
+      AMOUNT_KEYS.forEach(function (k) {
+        out[k].act = addAmt(out[k].act, cell[k].act);
+        out[k].bud += cell[k].bud;
+        out[k].ly += cell[k].ly;
+      });
+    });
+    if (m + 1 > CLOSED_M) AMOUNT_KEYS.forEach(function (k) { out[k].act = null; });
+    return out;
+  }
+  function getCell(coKey, m) {
+    return coKey === 'group' ? groupMonth(m) : RAW[coKey][m];
+  }
+  function sumRange(coKey, from, to) {
+    var out = {};
+    AMOUNT_KEYS.forEach(function (k) { out[k] = { act: null, bud: 0, ly: 0 }; });
+    for (var m = from; m <= to; m++) {
+      var cell = getCell(coKey, m);
+      AMOUNT_KEYS.forEach(function (k) {
+        out[k].act = addAmt(out[k].act, cell[k].act);
+        out[k].bud += cell[k].bud;
+        out[k].ly += cell[k].ly;
+      });
+    }
+    var hasAct = false;
+    AMOUNT_KEYS.forEach(function (k) { if (out[k].act != null) hasAct = true; });
+    if (!hasAct) AMOUNT_KEYS.forEach(function (k) { out[k].act = null; });
+    return out;
+  }
+  function div(a, b) {
+    if (a == null || b == null || !isFinite(a) || !isFinite(b) || Math.abs(b) < 1e-12) return null;
+    return a / b;
+  }
+  function pct(a, b) {
+    var r = div(a, b);
+    return r == null ? null : r * 100;
+  }
+  function metricView(cell, metric) {
+    var act, bud, ly;
+    if (metric.kind === 'rate') {
+      act = cell[metric.num].act == null ? null : pct(cell[metric.num].act, cell[metric.den].act);
+      bud = pct(cell[metric.num].bud, cell[metric.den].bud);
+      ly = pct(cell[metric.num].ly, cell[metric.den].ly);
+    } else {
+      act = cell[metric.key].act;
+      bud = cell[metric.key].bud;
+      ly = cell[metric.key].ly;
+    }
+    var rate = pct(act, bud);
+    var yoy;
+    if (act == null || ly == null) yoy = null;
+    else if (metric.kind === 'rate') yoy = act - ly;
+    else yoy = pct(act - ly, Math.abs(ly));
+    return { act: act, bud: bud, ly: ly, rate: rate, yoy: yoy };
+  }
+
+  function fmtAmt(v, digits) {
+    if (v == null || !isFinite(v)) return '—';
+    var d = digits == null ? 0 : digits;
+    return v.toLocaleString('zh-CN', { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  function fmtNum(v, metric, digits) {
+    if (v == null || !isFinite(v)) return '—';
+    if (metric.kind === 'rate') return v.toFixed(1) + '%';
+    return fmtAmt(v, digits == null ? 0 : digits);
+  }
+  function rateCls(v) {
+    if (v == null || !isFinite(v)) return 'na';
+    return v >= 100 ? 'good' : 'bad';
+  }
+  function yoyCls(v) {
+    if (v == null || !isFinite(v)) return 'na';
+    if (v > 0) return 'good';
+    if (v < 0) return 'bad';
+    return 'flat';
+  }
+  function fmtRate(v) {
+    if (v == null || !isFinite(v)) return '—';
+    return v.toFixed(1) + '%';
+  }
+  function fmtYoy(v, metric) {
+    if (v == null || !isFinite(v)) return '—';
+    var sign = v > 0 ? '+' : '';
+    if (metric && metric.kind === 'rate') return sign + v.toFixed(1) + '%';
+    return sign + Math.round(v) + '%';
+  }
+  function chartNum(val, asPct) {
+    if (val == null || !isFinite(val)) return '—';
+    if (asPct) return Number(val).toFixed(1) + '%';
+    return Math.round(val).toLocaleString('zh-CN');
+  }
+  function comboLabelFormatter(metric) {
+    return function (p) {
+      if (p.value == null || !isFinite(p.value)) return '';
+      var pctSeries = p.seriesName === '完成率' || p.seriesName === '同比' || (p.seriesName && p.seriesName.indexOf('达成率') >= 0);
+      if (pctSeries || metric.kind === 'rate') {
+        if (p.seriesName === '同比' && metric.kind !== 'rate') return Math.round(p.value) + '%';
+        return Number(p.value).toFixed(1) + '%';
+      }
+      return Math.round(p.value).toLocaleString('zh-CN');
+    };
+  }
+  function axisIntFormatter(kind) {
+    return function (v) {
+      if (kind === 'rate') return Number(v).toFixed(0);
+      return Math.round(v);
+    };
+  }
+  function tooltipFormatter(metric) {
+    return function (params) {
+      if (!params || !params.length) return '';
+      var html = params[0].axisValue + '<br/>';
+      params.forEach(function (p) {
+        var pctSeries = p.seriesName === '完成率' || p.seriesName === '同比' || (p.seriesName && p.seriesName.indexOf('达成率') >= 0);
+        var asPct = pctSeries || metric.kind === 'rate';
+        var text;
+        if (p.value == null || !isFinite(p.value)) text = '—';
+        else if (p.seriesName === '同比' && metric.kind !== 'rate') text = (p.value > 0 ? '+' : '') + Math.round(p.value) + '%';
+        else if (asPct) text = Number(p.value).toFixed(1) + '%';
+        else text = Math.round(p.value).toLocaleString('zh-CN');
+        html += p.marker + p.seriesName + '：' + text + '<br/>';
+      });
+      return html;
+    };
+  }
+  function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
+  function dayOfYear(d) {
+    var start = new Date(d.getFullYear(), 0, 0);
+    return Math.floor((d - start) / 86400000);
+  }
+  function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+
+  function selectedYM() {
+    var v = document.getElementById('ymSelect').value;
+    return { year: parseInt(v.slice(0, 4), 10), month: parseInt(v.slice(4, 6), 10) };
+  }
+
+  function cutoffDate(selM) {
+    var monthEnd = new Date(YEAR, selM, 0);
+    return monthEnd < AS_OF ? monthEnd : AS_OF;
+  }
+
+  function renderInfo() {
+    var sel = selectedYM().month;
+    var cut = cutoffDate(sel);
+    var y = YEAR, m = sel;
+    var monthStart = y + String(m).padStart(2, '0') + '01';
+    var lastDay = (cut.getMonth() + 1 === m && cut.getFullYear() === y) ? cut.getDate() : daysInMonth(y, m);
+    var monthEnd = y + String(m).padStart(2, '0') + String(lastDay).padStart(2, '0');
+    var ytdStart = y + '0101';
+    var ytdEnd = y + String(cut.getMonth() + 1).padStart(2, '0') + String(cut.getDate()).padStart(2, '0');
+    var monthProg = lastDay / daysInMonth(y, m) * 100;
+    if (cut.getMonth() + 1 > m) monthProg = 100;
+    if (cut.getMonth() + 1 < m) monthProg = 0;
+    var yearProg = dayOfYear(cut) / (isLeap(y) ? 366 : 365) * 100;
+    document.getElementById('infoBar').innerHTML =
+      '<span><span class="info-label">数据时间：</span>当月数据为 ' + monthStart + '-' + monthEnd + '；年累数据为 ' + ytdStart + '-' + ytdEnd + '</span>' +
+      '<span><span class="info-label">月度时间进度：</span><span class="info-progress">' + monthProg.toFixed(1) + '%</span></span>' +
+      '<span><span class="info-label">年度时间进度：</span><span class="info-progress">' + yearProg.toFixed(1) + '%</span></span>' +
+      '<div class="info-note">📌 <b>达成率颜色说明：</b>达成率≥100%为<span style="color:#16a34a;font-weight:700;">绿色</span>，否则为<span style="color:#ef4444;font-weight:700;">红色</span>；同比&gt;0为<span style="color:#16a34a;font-weight:700;">绿色</span>，=0为黑色，&lt;0为<span style="color:#ef4444;font-weight:700;">红色</span></div>';
+  }
+
+  function metricPairHtml(view, metric) {
+    return '<div class="cell-val p-value">' + fmtNum(view.act, metric, 0) + '</div>' +
+      '<div class="cell-rate p-meta"><span class="p-rate-label">达成率</span><span class="p-rate-val ' + rateCls(view.rate) + '">' + fmtRate(view.rate) + '</span></div>' +
+      '<div class="cell-yoy p-meta"><span class="p-rate-label">同比</span><span class="p-yoy-val ' + yoyCls(view.yoy) + '">' + fmtYoy(view.yoy, metric) + '</span></div>';
+  }
+  function buTriple(view, metric, prefix, split) {
+    var cls = split ? ' bu-split' : '';
+    return '<div class="cell-val ' + prefix + '-val' + cls + '">' + fmtNum(view.act, metric, 0) + '</div>' +
+      '<div class="cell-rate ' + prefix + '-rate ' + rateCls(view.rate) + cls + '">' + fmtRate(view.rate) + '</div>' +
+      '<div class="cell-yoy ' + prefix + '-yoy ' + yoyCls(view.yoy) + cls + '">' + fmtYoy(view.yoy, metric) + '</div>';
+  }
+
+  function renderCards() {
+    var selM = selectedYM().month;
+    var grid = document.getElementById('kpiGrid');
+    var html = '';
+    METRICS.forEach(function (metric, idx) {
+      var gMonth = metricView(getCell('group', selM - 1), metric);
+      var gYtd = metricView(sumRange('group', 0, selM - 1), metric);
+      html += '<div class="kpi-card">';
+      html += '<button class="trend-btn" type="button" onclick="openTrendModal(' + idx + ')" title="查看趋势分析"><svg viewBox="0 0 32 22" fill="none"><rect x="2" y="14" width="5" height="8" rx="1.5" fill="#6366f1"/><rect x="10" y="8" width="5" height="14" rx="1.5" fill="#6366f1"/><rect x="18" y="11" width="5" height="11" rx="1.5" fill="#6366f1"/><rect x="26" y="3" width="5" height="19" rx="1.5" fill="#6366f1"/></svg></button>';
+      html += '<div class="card-title">' + metric.name + '（' + metric.unit + '）<span class="info-icon" data-tip="' + metric.tip + '">?</span></div>';
+      html += '<div class="kpi-sides">';
+      html += '<div class="kpi-side month">';
+      html += '<div class="cell-lab"><span class="p-badge">月</span></div>' + metricPairHtml(gMonth, metric);
+      COMPANIES.forEach(function (co, i) {
+        var mView = metricView(getCell(co.key, selM - 1), metric);
+        var split = i === 0;
+        html += '<div class="cell-lab' + (split ? ' bu-split' : '') + '"><span class="bu-dot ' + co.key + '"></span>' + co.name + '</div>';
+        html += buTriple(mView, metric, 'bm', split);
+      });
+      html += '</div>';
+      html += '<div class="kpi-side year">';
+      html += '<div class="cell-lab"><span class="p-badge ytd">年累</span></div>' + metricPairHtml(gYtd, metric);
+      COMPANIES.forEach(function (co, i) {
+        var yView = metricView(sumRange(co.key, 0, selM - 1), metric);
+        var split = i === 0;
+        html += '<div class="cell-lab' + (split ? ' bu-split' : '') + '"><span class="bu-dot ' + co.key + '"></span>' + co.name + '</div>';
+        html += buTriple(yView, metric, 'by', split);
+      });
+      html += '</div></div></div>';
+    });
+    grid.innerHTML = html;
+  }
+
+  var comboChart, trendChart;
+  var visibleSeries = { jbActual: true, hpActual: true, yyActual: true, jbRate: true, hpRate: true, yyRate: true };
+
+  function chartTitleText() {
+    var mk = document.getElementById('chartMetric').value;
+    var ck = document.getElementById('chartCompany').value;
+    var metric = METRICS.find(function (x) { return x.key === mk; });
+    var co = CO_ALL.find(function (x) { return x.key === ck; });
+    return (co.short || co.name) + metric.name + '月趋势';
+  }
+
+  function renderCombo() {
+    var mk = document.getElementById('chartMetric').value;
+    var ck = document.getElementById('chartCompany').value;
+    var metric = METRICS.find(function (x) { return x.key === mk; });
+    document.getElementById('comboTitle').textContent = chartTitleText();
+    var selM = selectedYM().month;
+    var labels = MONTH_LABELS.slice(0, selM);
+    var act = [], bud = [], rate = [], yoy = [];
+    for (var m = 0; m < selM; m++) {
+      var v = metricView(getCell(ck, m), metric);
+      act.push(v.act);
+      bud.push(v.bud);
+      rate.push(v.rate);
+      yoy.push(v.yoy);
+    }
+    var leftName = metric.kind === 'rate' ? '%' : '万元';
+    if (!comboChart) comboChart = echarts.init(document.getElementById('comboChart'));
+    comboChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: tooltipFormatter(metric) },
+      legend: { top: 4, data: ['实际', '预算', '完成率', '同比'] },
+      grid: { left: 56, right: 56, top: 40, bottom: 36 },
+      xAxis: { type: 'category', data: labels, axisTick: { alignWithLabel: true } },
+      yAxis: [
+        { type: 'value', name: leftName, splitLine: { lineStyle: { color: '#eef2f7' } }, axisLabel: { formatter: axisIntFormatter(metric.kind) } },
+        { type: 'value', name: '%', splitLine: { show: false }, axisLabel: { formatter: '{value}%' } }
+      ],
+      series: [
+        { name: '实际', type: 'bar', barGap: '20%', barMaxWidth: 22, itemStyle: { color: CHART_COLOR.act, borderRadius: [3, 3, 0, 0] }, data: act, label: { show: false } },
+        { name: '预算', type: 'bar', barMaxWidth: 22, itemStyle: { color: CHART_COLOR.bud, borderRadius: [3, 3, 0, 0] }, data: bud, label: { show: false } },
+        { name: '完成率', type: 'line', yAxisIndex: 1, symbol: 'circle', symbolSize: 7, itemStyle: { color: CHART_COLOR.rate }, lineStyle: { width: 2.5 }, data: rate, label: { show: false } },
+        { name: '同比', type: 'line', yAxisIndex: 1, symbol: 'circle', symbolSize: 7, itemStyle: { color: CHART_COLOR.yoy }, lineStyle: { width: 2.5 }, data: yoy, label: { show: false } }
+      ]
+    }, true);
+  }
+
+  function cellClass(itemKey, val) {
+    if (val == null || !isFinite(val)) return 'rate-na';
+    if (itemKey === 'rate') return val >= 100 ? 'rate-good' : 'rate-bad';
+    if (itemKey === 'yoy') return val > 0 ? 'rate-good' : (val < 0 ? 'rate-bad' : 'rate-flat');
+    return '';
+  }
+  function fmtItem(itemKey, val, metric) {
+    if (val == null || !isFinite(val)) return '—';
+    if (itemKey === 'rate') return fmtRate(val);
+    if (itemKey === 'yoy') return fmtYoy(val, metric);
+    return fmtNum(val, metric, 0);
+  }
+
+  var FUNNEL_SVG = '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M1.2 1.5h9.6L7.2 6.2v3.6L4.8 11V6.2L1.2 1.5z"/></svg>';
+  var dfState = { metric: null, co: null, item: null };
+  var excelFilterCol = null;
+  function dfKeys(col) {
+    if (col === 'metric') return METRICS.map(function (x) { return x.key; });
+    if (col === 'co') return CO_ALL.map(function (x) { return x.key; });
+    return ITEMS.map(function (x) { return x.key; });
+  }
+  function dfList(col) {
+    if (col === 'metric') return METRICS;
+    if (col === 'co') return CO_ALL;
+    return ITEMS;
+  }
+  function dfChecked(col) {
+    var all = dfKeys(col);
+    var cur = dfState[col];
+    if (cur == null) return all.slice();
+    return cur.slice();
+  }
+  function dfSelected(col) {
+    var all = dfKeys(col);
+    var cur = dfChecked(col);
+    if (!cur.length || cur.length === all.length) return all.slice();
+    return cur;
+  }
+  function dfIsFiltered(col) {
+    var cur = dfState[col];
+    var all = dfKeys(col);
+    return !!(cur && cur.length && cur.length < all.length);
+  }
+  function filterByKeys(list, keys) {
+    return list.filter(function (x) { return keys.indexOf(x.key) >= 0; });
+  }
+  function closeExcelFilter() {
+    var pop = document.getElementById('excelFilterPop');
+    pop.classList.remove('show');
+    pop.hidden = true;
+    excelFilterCol = null;
+    document.querySelectorAll('.excel-filter-btn.open').forEach(function (b) { b.classList.remove('open'); });
+  }
+  function updateExcelFilterBtns() {
+    document.querySelectorAll('.excel-filter-btn').forEach(function (btn) {
+      var col = btn.getAttribute('data-col');
+      btn.classList.toggle('is-filtered', dfIsFiltered(col));
+    });
+  }
+  function fillExcelPop(col) {
+    var pop = document.getElementById('excelFilterPop');
+    var selected = dfChecked(col);
+    var allKeys = dfKeys(col);
+    var allOn = selected.length === allKeys.length;
+    var html = '<label class="excel-all"><input type="checkbox" data-excel-all="1"' + (allOn ? ' checked' : '') + '> 全选</label><div class="excel-list">';
+    dfList(col).forEach(function (x) {
+      var on = selected.indexOf(x.key) >= 0;
+      html += '<label class="excel-item"><input type="checkbox" data-excel-key="' + x.key + '"' + (on ? ' checked' : '') + '> ' + x.name + '</label>';
+    });
+    html += '</div>';
+    pop.innerHTML = html;
+  }
+  function openExcelFilter(btn) {
+    var col = btn.getAttribute('data-col');
+    var pop = document.getElementById('excelFilterPop');
+    if (excelFilterCol === col && pop.classList.contains('show')) {
+      closeExcelFilter();
+      return;
+    }
+    excelFilterCol = col;
+    fillExcelPop(col);
+    pop.hidden = false;
+    pop.classList.add('show');
+    document.querySelectorAll('.excel-filter-btn').forEach(function (b) { b.classList.toggle('open', b === btn); });
+    var r = btn.getBoundingClientRect();
+    var popH = pop.offsetHeight || 240;
+    var popW = pop.offsetWidth || 180;
+    var left = r.left;
+    if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+    if (left < 8) left = 8;
+    var top = r.bottom + 4;
+    if (top + popH > window.innerHeight - 8 && r.top - popH - 4 > 8) top = r.top - popH - 4;
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+  }
+  function applyExcelChecks() {
+    if (!excelFilterCol) return;
+    var pop = document.getElementById('excelFilterPop');
+    var keys = [];
+    pop.querySelectorAll('input[data-excel-key]').forEach(function (inp) {
+      if (inp.checked) keys.push(inp.getAttribute('data-excel-key'));
+    });
+    var all = dfKeys(excelFilterCol);
+    if (!keys.length) dfState[excelFilterCol] = [];
+    else if (keys.length === all.length) dfState[excelFilterCol] = null;
+    else dfState[excelFilterCol] = keys;
+    var allBox = pop.querySelector('input[data-excel-all]');
+    if (allBox) allBox.checked = keys.length === all.length;
+    renderDetailBody();
+    updateExcelFilterBtns();
+  }
+
+  function renderDetailThead() {
+    var thead = '<thead><tr>';
+    thead += '<th class="th-filterable">指标名称<button type="button" class="excel-filter-btn" data-col="metric" title="筛选">' + FUNNEL_SVG + '</button></th>';
+    thead += '<th class="th-filterable">公司名称<button type="button" class="excel-filter-btn" data-col="co" title="筛选">' + FUNNEL_SVG + '</button></th>';
+    thead += '<th class="th-filterable">项目<button type="button" class="excel-filter-btn" data-col="item" title="筛选">' + FUNNEL_SVG + '</button></th>';
+    MONTH_LABELS.forEach(function (lab) { thead += '<th>' + lab + '</th>'; });
+    thead += '<th>合计</th></tr></thead><tbody></tbody>';
+    document.getElementById('detailTable').innerHTML = thead;
+  }
+  function renderDetailBody() {
+    var selM = selectedYM().month;
+    var metrics = filterByKeys(METRICS, dfSelected('metric'));
+    var companies = filterByKeys(CO_ALL, dfSelected('co'));
+    var items = filterByKeys(ITEMS, dfSelected('item'));
+    var table = document.getElementById('detailTable');
+    var tbody = table.querySelector('tbody');
+    if (!tbody) {
+      renderDetailThead();
+      tbody = table.querySelector('tbody');
+    }
+    if (!metrics.length || !companies.length || !items.length) {
+      tbody.innerHTML = '';
+      updateExcelFilterBtns();
+      return;
+    }
+    var body = '';
+    var rsMetric = companies.length * items.length;
+    var rsCo = items.length;
+    metrics.forEach(function (metric) {
+      companies.forEach(function (co, ci) {
+        var ytd = metricView(sumRange(co.key, 0, selM - 1), metric);
+        var months = [];
+        for (var m = 0; m < 12; m++) months.push(metricView(getCell(co.key, m), metric));
+        items.forEach(function (item, ii) {
+          body += '<tr>';
+          if (ci === 0 && ii === 0) body += '<td class="metric-cell" rowspan="' + rsMetric + '">' + metric.name + '</td>';
+          if (ii === 0) body += '<td class="row-label" rowspan="' + rsCo + '">' + co.name + '</td>';
+          body += '<td class="row-label">' + item.name + '</td>';
+          months.forEach(function (v) {
+            var val = v[item.key];
+            body += '<td class="' + cellClass(item.key, val) + '">' + fmtItem(item.key, val, metric) + '</td>';
+          });
+          var tot = ytd[item.key];
+          body += '<td class="total-col ' + cellClass(item.key, tot) + '">' + fmtItem(item.key, tot, metric) + '</td>';
+          body += '</tr>';
+        });
+      });
+    });
+    tbody.innerHTML = body;
+    updateExcelFilterBtns();
+  }
+  function renderDetail() {
+    var table = document.getElementById('detailTable');
+    if (!table.querySelector('thead')) renderDetailThead();
+    renderDetailBody();
+  }
+
+  window.openTrendModal = function (idx) {
+    var metric = METRICS[idx];
+    document.getElementById('modalTitle').textContent = metric.name + '（' + metric.unit + '）- 趋势分析';
+    visibleSeries = { jbActual: true, hpActual: true, yyActual: true, jbRate: true, hpRate: true, yyRate: true };
+    var legend = '';
+    [
+      { k: 'jbActual', name: '佳贝实际值', color: '#f59e0b', line: false },
+      { k: 'hpActual', name: '海普实际值', color: '#3b82f6', line: false },
+      { k: 'yyActual', name: '营养品实际值', color: '#10b981', line: false },
+      { k: 'jbRate', name: '佳贝达成率', color: '#f59e0b', line: true },
+      { k: 'hpRate', name: '海普达成率', color: '#3b82f6', line: true },
+      { k: 'yyRate', name: '营养品达成率', color: '#10b981', line: true }
+    ].forEach(function (it) {
+      if (it.line) {
+        legend += '<button type="button" class="legend-item active" data-series="' + it.k + '" onclick="toggleSeries(this)">' +
+          '<svg class="swatch-line" width="28" height="14" viewBox="0 0 28 14"><line x1="2" y1="10" x2="10" y2="4" stroke="' + it.color + '" stroke-width="2.5" stroke-linecap="round"/><line x1="10" y1="4" x2="18" y2="8" stroke="' + it.color + '" stroke-width="2.5" stroke-linecap="round"/><line x1="18" y1="8" x2="26" y2="3" stroke="' + it.color + '" stroke-width="2.5" stroke-linecap="round"/><circle cx="10" cy="4" r="2.5" fill="' + it.color + '"/><circle cx="18" cy="8" r="2.5" fill="' + it.color + '"/></svg>' +
+          '<span class="legend-label">' + it.name + '</span></button>';
+      } else {
+        legend += '<button type="button" class="legend-item active" data-series="' + it.k + '" onclick="toggleSeries(this)">' +
+          '<span class="swatch" style="background:' + it.color + ';"></span><span class="legend-label">' + it.name + '</span></button>';
+      }
+    });
+    document.getElementById('legendBar').innerHTML = legend;
+    document.getElementById('trendModal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+    drawTrendChart(idx);
+    renderLevelTable(idx);
+    requestAnimationFrame(function () {
+      if (trendChart) trendChart.resize();
+    });
+    setTimeout(function () { if (trendChart) trendChart.resize(); }, 50);
+  };
+
+  window.toggleSeries = function (el) {
+    var k = el.dataset.series;
+    visibleSeries[k] = !visibleSeries[k];
+    el.classList.toggle('inactive', !visibleSeries[k]);
+    el.classList.toggle('active', visibleSeries[k]);
+    var title = document.getElementById('modalTitle').textContent;
+    var idx = METRICS.findIndex(function (m) { return title.indexOf(m.name) === 0; });
+    if (idx >= 0) drawTrendChart(idx);
+  };
+
+  window.closeModal = function () {
+    document.getElementById('trendModal').classList.remove('show');
+    document.body.style.overflow = '';
+  };
+
+  function drawTrendChart(idx) {
+    var metric = METRICS[idx];
+    var selM = selectedYM().month;
+    var labels = MONTH_LABELS.slice(0, selM);
+    var seriesMap = { jb: { act: [], rate: [] }, hp: { act: [], rate: [] }, yy: { act: [], rate: [] } };
+    for (var m = 0; m < selM; m++) {
+      COMPANIES.forEach(function (co) {
+        var v = metricView(getCell(co.key, m), metric);
+        seriesMap[co.key].act.push(v.act);
+        seriesMap[co.key].rate.push(v.rate);
+      });
+    }
+    if (!trendChart) trendChart = echarts.init(document.getElementById('trendChart'));
+    var series = [
+      { name: '佳贝实际值', type: 'bar', data: seriesMap.jb.act, itemStyle: { color: '#f59e0b', borderRadius: [3, 3, 0, 0] }, barMaxWidth: 14, show: visibleSeries.jbActual },
+      { name: '海普实际值', type: 'bar', data: seriesMap.hp.act, itemStyle: { color: '#3b82f6', borderRadius: [3, 3, 0, 0] }, barMaxWidth: 14, show: visibleSeries.hpActual },
+      { name: '营养品实际值', type: 'bar', data: seriesMap.yy.act, itemStyle: { color: '#10b981', borderRadius: [3, 3, 0, 0] }, barMaxWidth: 14, show: visibleSeries.yyActual },
+      { name: '佳贝达成率', type: 'line', yAxisIndex: 1, data: seriesMap.jb.rate, itemStyle: { color: '#f59e0b' }, symbol: 'circle', symbolSize: 7, lineStyle: { width: 2.5 }, show: visibleSeries.jbRate },
+      { name: '海普达成率', type: 'line', yAxisIndex: 1, data: seriesMap.hp.rate, itemStyle: { color: '#3b82f6' }, symbol: 'circle', symbolSize: 7, lineStyle: { width: 2.5 }, show: visibleSeries.hpRate },
+      { name: '营养品达成率', type: 'line', yAxisIndex: 1, data: seriesMap.yy.rate, itemStyle: { color: '#10b981' }, symbol: 'circle', symbolSize: 7, lineStyle: { width: 2.5 }, show: visibleSeries.yyRate }
+    ];
+    series.forEach(function (s) {
+      if (s.show === false) s.data = s.data.map(function () { return null; });
+      s.label = { show: false };
+    });
+    trendChart.setOption({
+      tooltip: { trigger: 'axis', formatter: tooltipFormatter(metric) },
+      legend: { show: false, selectedMode: false },
+      grid: { left: 56, right: 56, top: 16, bottom: 28 },
+      xAxis: { type: 'category', data: labels },
+      yAxis: [
+        { type: 'value', name: metric.kind === 'rate' ? '%' : '万元', splitLine: { lineStyle: { color: '#eef2f7' } }, axisLabel: { formatter: axisIntFormatter(metric.kind) } },
+        { type: 'value', name: '%', splitLine: { show: false }, axisLabel: { formatter: '{value}%' } }
+      ],
+      series: series
+    }, true);
+  }
+
+  function renderLevelTable(idx) {
+    var metric = METRICS[idx];
+    var selM = selectedYM().month;
+    var labels = MONTH_LABELS.slice(0, selM);
+    var entries = [{ key: 'group', name: '集团整体', cls: 'level-header' }].concat(COMPANIES.map(function (c) { return { key: c.key, name: c.name, cls: '' }; }));
+    var html = '<thead><tr><th>层级</th><th>指标</th>';
+    labels.forEach(function (lab) { html += '<th>' + lab + '</th>'; });
+    html += '</tr></thead><tbody>';
+    entries.forEach(function (r) {
+      var rows = { act: [], bud: [], rate: [], ly: [], yoy: [] };
+      for (var m = 0; m < selM; m++) {
+        var v = metricView(getCell(r.key, m), metric);
+        rows.act.push(v.act); rows.bud.push(v.bud); rows.rate.push(v.rate); rows.ly.push(v.ly); rows.yoy.push(v.yoy);
+      }
+      html += '<tr class="' + r.cls + '"><td class="row-label" rowspan="5">' + r.name + '</td><td class="row-label">实际</td>';
+      rows.act.forEach(function (v) { html += '<td>' + fmtNum(v, metric, 0) + '</td>'; });
+      html += '</tr><tr class="' + r.cls + '"><td class="row-label">预算</td>';
+      rows.bud.forEach(function (v) { html += '<td>' + fmtNum(v, metric, 0) + '</td>'; });
+      html += '</tr><tr class="' + r.cls + '"><td class="row-label">达成率</td>';
+      rows.rate.forEach(function (v) { html += '<td class="' + (v == null ? 'rate-na' : (v >= 100 ? 'rate-good' : 'rate-bad')) + '">' + fmtRate(v) + '</td>'; });
+      html += '</tr><tr class="' + r.cls + '"><td class="row-label">同期</td>';
+      rows.ly.forEach(function (v) { html += '<td>' + fmtNum(v, metric, 0) + '</td>'; });
+      html += '</tr><tr class="' + r.cls + '"><td class="row-label">同比</td>';
+      rows.yoy.forEach(function (v) {
+        var cls = v == null ? 'rate-na' : (v > 0 ? 'rate-good' : (v < 0 ? 'rate-bad' : 'rate-flat'));
+        html += '<td class="' + cls + '">' + fmtYoy(v, metric) + '</td>';
+      });
+      html += '</tr>';
+    });
+    document.getElementById('levelDataTable').innerHTML = html;
+  }
+
+  window.renderAll = function () {
+    renderInfo();
+    renderCards();
+    renderCombo();
+    renderDetail();
+  };
+
+  function initFilters() {
+    var ym = document.getElementById('ymSelect');
+    var opts = '';
+    for (var m = 1; m <= CLOSED_M; m++) {
+      var v = '2026' + String(m).padStart(2, '0');
+      opts += '<option value="' + v + '"' + (m === 8 ? ' selected' : '') + '>' + v + '</option>';
+    }
+    ym.innerHTML = opts;
+    ym.addEventListener('change', renderAll);
+    var cm = document.getElementById('chartMetric');
+    cm.innerHTML = METRICS.map(function (m) { return '<option value="' + m.key + '">' + m.name + '</option>'; }).join('');
+    var cc = document.getElementById('chartCompany');
+    cc.innerHTML = CO_ALL.map(function (c) { return '<option value="' + c.key + '">' + c.name + '</option>'; }).join('');
+    cm.addEventListener('change', renderCombo);
+    cc.addEventListener('change', renderCombo);
+    document.getElementById('detailTable').addEventListener('click', function (e) {
+      var btn = e.target.closest ? e.target.closest('.excel-filter-btn') : null;
+      if (!btn) return;
+      e.stopPropagation();
+      openExcelFilter(btn);
+    });
+    document.getElementById('excelFilterPop').addEventListener('click', function (e) { e.stopPropagation(); });
+    document.getElementById('excelFilterPop').addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || t.tagName !== 'INPUT') return;
+      if (t.getAttribute('data-excel-all')) {
+        dfState[excelFilterCol] = t.checked ? null : [];
+        fillExcelPop(excelFilterCol);
+        renderDetailBody();
+        updateExcelFilterBtns();
+        return;
+      }
+      applyExcelChecks();
+    });
+    document.addEventListener('click', closeExcelFilter);
+    document.querySelector('.scroll-x').addEventListener('scroll', closeExcelFilter);
+  }
+
+  document.getElementById('trendModal').addEventListener('click', function (e) {
+    if (e.target === this) closeModal();
+  });
+  window.addEventListener('resize', function () {
+    if (comboChart) comboChart.resize();
+    if (trendChart) trendChart.resize();
+  });
+
+  initFilters();
+  renderAll();
+})();
+</script>
+</body>
+</html>
